@@ -1,0 +1,22 @@
+{
+  "name": "helix-importer-bundle",
+  "version": "1.0.0",
+  "description": "",
+  "main": "converter.js",
+  "type": "module",
+  "author": "",
+  "license": "ISC",
+  "scripts": {
+    "browserify": "npx browserify -p esmify converter.js --standalone converter -o ../web/js/lib/converter-bundle.js"
+  },
+  "dependencies": {
+    "rehype-parse": "7.0.1",
+    "rehype-remark": "8.0.0",
+    "remark-stringify": "8.1.1",
+    "unified": "9.2.0"
+  },
+  "devDependencies": {
+    "browserify": "^17.0.0",
+    "esmify": "^2.1.1"
+  }
+}

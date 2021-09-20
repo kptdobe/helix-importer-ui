@@ -1,0 +1,164 @@
+<html>
+  <head>
+    <link href="css/styles.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.48.4/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.48.4/theme/base16-dark.css">
+  </head>
+  <body>
+    <div class="wrapper">
+      <div class="header">
+        <input type="text" value="https://blog.adobe.com/en/publish/2021/09/20/adobe-digital-economy-index-flight-prices-fall-as-covid-19-dampens-demand-thanksgiving-bookings-off-to-slow-start.html" style="width: 600px;" id="url">
+        <input type="button" value="Load" id="load">
+      </div>
+      <div class="left">
+        <h2>Source</h2>
+        <div class="code">
+          <textarea id="source" rows="4" cols="10"></textarea>
+        </div>
+      </div>
+      <div class="middle">
+        <h2>Your transformation</h2>
+        <div class="code">
+          <textarea id="transformed" rows="4" cols="10"></textarea>
+        </div>
+      </div>
+      <div class="right markdown">
+        <h2>Markdown - Preview <input type="checkbox" id="mdPreviewCheckbox"></h2>
+        <div class="code">
+          <textarea id="markdownSource" rows="4" cols="10"></textarea>
+        </div>
+        <div id="markdownPreview" class="hidden"></div>
+      </div>
+      <div class="footer">
+        <div class="code">
+          <textarea id="importer" rows="4" cols="10">
+async function(document, url) {
+  // add your code here
+  return document;
+}</textarea>
+        </div>
+      </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.3/codemirror.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.3/mode/xml/xml.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.3/mode/javascript/javascript.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.3/mode/css/css.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.3/mode/htmlmixed/htmlmixed.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.62.3/mode/markdown/markdown.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.0/beautify-html.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/showdown/1.9.1/showdown.min.js"></script>
+    <script src="./js/lib/converter-bundle.js"></script>
+    <script>
+      
+
+      const sourceEditor = CodeMirror.fromTextArea(document.getElementById('source'), {
+        lineNumbers: true,
+        mode: 'htmlmixed',
+        theme: 'base16-dark',
+      });
+      sourceEditor.setSize('100%', '750');
+
+      const transformedEditor = CodeMirror.fromTextArea(document.getElementById('transformed'), {
+        lineNumbers: true,
+        mode: 'htmlmixed',
+        theme: 'base16-dark',
+      });
+      transformedEditor.setSize('100%', '750');
+
+      const markdownEditor = CodeMirror.fromTextArea(document.getElementById('markdownSource'), {
+        lineNumbers: true,
+        mode: 'markdown',
+        theme: 'base16-dark',
+      });
+      markdownEditor.setSize('100%', '750');
+
+      const importerEditor = CodeMirror.fromTextArea(document.getElementById('importer'), {
+        lineNumbers: true,
+        mode: 'javascript',
+        theme: 'base16-dark',
+      });
+      importerEditor.setSize('100%', 300);
+
+
+      // events
+      document.getElementById('load').addEventListener('click',  async () => {
+        const url = document.getElementById('url').value;
+        const res = await fetch(`/proxy?url=${url}`);
+        if (res.ok) {
+          const html = await res.text();
+          sourceEditor.setValue(html_beautify(html));
+          await transform();
+        } else {
+          console.error(`Cannot fetch ${url}`);
+        }
+      });
+
+      document.getElementById('mdPreviewCheckbox').addEventListener('click',  (evt) => {
+        const source = document.querySelector('.markdown .code');
+        const preview = document.getElementById('markdownPreview');
+        if (evt.target.checked) {
+          source.classList.add('hidden');
+          preview.classList.remove('hidden');
+        } else {
+          source.classList.remove('hidden');
+          preview.classList.add('hidden');
+        }
+      });
+
+      const preFilter = (doc) => {
+        // remove html comments
+        // TODO use helix-importer
+        doc.body.innerHTML = doc.body.innerHTML.replace(/<!--(?!>)[\S\s]*?-->/gm, '');
+        return doc;
+      }
+
+      const saveCode = (code) => {
+        localStorage.setItem('hlx-importer-code', code);
+      }
+
+      const loadCode = () => {
+        const code = localStorage.getItem('hlx-importer-code');
+        if (code) {
+          importerEditor.setValue(code);
+        }
+      }
+
+      loadCode();
+
+      const transform = async () => {
+        const importerCode = importerEditor.getValue();
+
+        let fct;
+        try {
+          eval(`${importerCode}`);
+          if (!window.importer) {
+            console.warn('No importer function after eval');
+            return;
+          }
+          fct = importer;
+        } catch(error) {
+          // probably typing
+          return;
+        }
+
+        saveCode(importerCode);
+
+        const parser = new DOMParser();
+        const inputDoc = parser.parseFromString(sourceEditor.getValue(), 'text/html');
+
+        const outputDoc = await fct(preFilter(inputDoc), document.getElementById('url').value);
+        const outputHTML = outputDoc.body.innerHTML;
+        transformedEditor.setValue(html_beautify(outputHTML));
+
+        const md = await converter.convert(outputHTML);
+        markdownEditor.setValue(md || '');
+
+        const showdownConverter = new showdown.Converter();
+        const mdPreview = showdownConverter.makeHtml(md);
+        document.getElementById('markdownPreview').innerHTML = mdPreview;
+      }
+
+      importerEditor.on('changes', transform);
+    </script>
+  </body>
+</html>
